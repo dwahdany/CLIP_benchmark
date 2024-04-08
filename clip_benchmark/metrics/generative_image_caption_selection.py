@@ -90,31 +90,35 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True):
                 input_text = texts_p[:, 0:-1]
                 out_text = texts_p[:, 1:]
                 _, input_text_embs_p = model._encode_text(input_text)
-                logits = model.text_decoder(image_embs_p, input_text_embs_p)
+                logits, _ = model._encode_text(input_text, image_embs_p)
+
                 scores = score_aligned(logits, out_text)
                 scores = scores.view(nim, ntext)
+                if torch.any(torch.isnan(scores)):
+                    pred_image_is_correct = False
+                    pred_text_is_correct = False
+                else:
+                    # i-th image should be matched to the i-th text
+                    image_closest_text = scores.argmax(dim=1)
+                    # -- deal with ties
+                    if ntext > 1:
+                        val = scores[:, 0:1]
+                        all_equal = ((scores==val).sum(dim=1) == ntext)
+                        image_closest_text[all_equal] = -1
 
-                # i-th image should be matched to the i-th text
-                image_closest_text = scores.argmax(dim=1)
-                # -- deal with ties
-                if ntext > 1:
-                    val = scores[:, 0:1]
-                    all_equal = ((scores==val).sum(dim=1) == ntext)
-                    image_closest_text[all_equal] = -1
+                    # i-th text should be matched to the i-th image
+                    text_closest_image = scores.argmax(dim=0)
+                    # -- deal with ties
+                    val = scores[0:1, :]
+                    if nim > 1:
+                        all_equal = ((scores==val).sum(dim=0) == nim)
+                        text_closest_image[all_equal] = -1
 
-                # i-th text should be matched to the i-th image
-                text_closest_image = scores.argmax(dim=0)
-                # -- deal with ties
-                val = scores[0:1, :]
-                if nim > 1:
-                    all_equal = ((scores==val).sum(dim=0) == nim)
-                    text_closest_image[all_equal] = -1
+                    image_closest_text = image_closest_text[:len(gt)]
+                    text_closest_image = text_closest_image[:len(gt)]
 
-                image_closest_text = image_closest_text[:len(gt)]
-                text_closest_image = text_closest_image[:len(gt)]
-
-                pred_text_is_correct = (image_closest_text==gt).all().item()
-                pred_image_is_correct = (text_closest_image==gt).all().item()
+                    pred_text_is_correct = (image_closest_text==gt).all().item()
+                    pred_image_is_correct = (text_closest_image==gt).all().item()
             all_correct = pred_text_is_correct and pred_image_is_correct
             image_score.append(pred_image_is_correct)
             text_score.append(pred_text_is_correct)
