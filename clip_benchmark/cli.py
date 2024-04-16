@@ -14,7 +14,7 @@ from clip_benchmark.datasets.builder import (build_dataset, dataset_collection,
                                              get_dataset_collate_fn,
                                              get_dataset_collection_from_file,
                                              get_dataset_default_task)
-from clip_benchmark.metrics import (captioning, image_caption_selection, generative_image_caption_selection,
+from clip_benchmark.metrics import (captioning, image_caption_selection, generative_image_caption_selection,  generative_zeroshot_classification,
                                     linear_probe, zeroshot_classification,
                                     zeroshot_retrieval)
 from clip_benchmark.model_collection import (get_model_collection_from_file,
@@ -38,13 +38,18 @@ def get_parser_args():
     parser_eval.add_argument('--model', type=str, nargs="+", default=["ViT-B-32-quickgelu"], help="Model architecture to use from OpenCLIP")
     parser_eval.add_argument('--pretrained', type=str, nargs="+", default=["laion400m_e32"], help="Model checkpoint name to use from OpenCLIP")
     parser_eval.add_argument('--pretrained_model', type=str, default="", nargs="+", help="Pre-trained model(s) to use. Can be the full model name where `model` and `pretrained` are comma separated (e.g., --pretrained_model='ViT-B-32-quickgelu,laion400m_e32'), a model collection name ('openai' or 'openclip_base' or 'openclip_multilingual' or 'openclip_all'), or path of a text file where each line is a model fullname where model and pretrained are comma separated (e.g., ViT-B-32-quickgelu,laion400m_e32). --model and --pretrained are ignored if --pretrained_model is used.")
-    parser_eval.add_argument('--task', type=str, default="auto", choices=["zeroshot_classification", "zeroshot_retrieval", "linear_probe", "captioning", "image_caption_selection", "generative_image_caption_selection", "auto"], help="Task to evaluate on. With --task=auto, the task is automatically inferred from the dataset.")
+    parser_eval.add_argument('--task', type=str, nargs="+", default="auto", choices=["zeroshot_classification", "zeroshot_retrieval", "linear_probe", "captioning", "image_caption_selection", "generative_image_caption_selection", "generative_zeroshot_classification", "auto"], help="Task to evaluate on. With --task=auto, the task is automatically inferred from the dataset.")
     parser_eval.add_argument('--no_amp', action="store_false", dest="amp", default=True, help="whether to use mixed precision")
     parser_eval.add_argument('--num_workers', default=4, type=int)
     parser_eval.add_argument('--recall_k', default=[5], type=int, help="for retrieval, select the k for Recall@K metric. ", nargs="+",)
     parser_eval.add_argument('--fewshot_k', default=-1, type=int, help="for linear probe, how many shots. -1 = whole dataset.")
     parser_eval.add_argument('--fewshot_epochs', default=10, type=int, help="for linear probe, how many epochs.")
     parser_eval.add_argument('--fewshot_lr', default=0.1, type=float, help="for linear probe, what is the learning rate.")
+    
+    parser_eval.add_argument('--generative-normalize', default=False, action="store_true", help="Log-likelihood scoring with normalization")
+    parser_eval.add_argument('--generative-normalize-coef', default=1, type=float, help="Log-likelihood scoring with normalization, coefficient")
+    parser_eval.add_argument('--generative-normalize-model', default='', type=str, help="Log-likelihood scoring with normalization, normalizer model")
+
     parser_eval.add_argument("--skip_load", action="store_true", help="for linear probes, when everything is cached, no need to load model.")
     parser_eval.add_argument("--distributed", action="store_true", help="evaluation in parallel")
     parser_eval.add_argument('--seed', default=0, type=int, help="random seed.")
@@ -165,12 +170,13 @@ def main_eval(base):
     
     # Get list of languages to evaluate on
     languages = _as_list(base.language)
-
+    tasks = _as_list(base.task)
     if base.verbose:
         print(f"Models: {models}")
         print(f"Datasets: {datasets}")
         print(f"Languages: {languages}")
-    runs = product(models, datasets, languages)
+        print(f"Tasks: {tasks}")
+    runs = product(models, datasets, languages, tasks)
     if base.distributed:
         local_rank, rank, world_size = world_info_from_env()
         runs = list(runs)
@@ -178,13 +184,14 @@ def main_eval(base):
         random.seed(base.seed)
         random.shuffle(runs)
         runs = [r for i, r in enumerate(runs) if i % world_size == rank]
-    for (model, pretrained), (dataset), (language) in runs:
+    for (model, pretrained), (dataset), (language), task in runs:
         # We iterative over all possible model/dataset/languages
         args = copy(base)
         args.model = model
         args.pretrained = pretrained
         args.dataset = dataset
         args.language = language
+        args.task = task
         args.train_split = dataset_info[dataset]["train_split"]
         args.val_split = dataset_info[dataset]["val_split"]
         args.val_proportion = dataset_info[dataset]["proportion"]
@@ -341,6 +348,24 @@ def run(args):
             tokenizer,
             device=args.device,
             amp=args.amp, 
+        )
+    elif task == "generative_zeroshot_classification":
+        zeroshot_templates = dataset.templates if hasattr(dataset, "templates") else None
+        if args.verbose:
+            print(f"Zero-shot templates: {zeroshot_templates}")
+        classnames = dataset.classes if hasattr(dataset, "classes") else None
+        assert (zeroshot_templates is not None and classnames is not None), "Dataset does not support classification"
+        metrics = generative_zeroshot_classification.evaluate(
+            model,
+            dataloader,
+            tokenizer,
+            classnames, 
+            zeroshot_templates, 
+            device,
+            distributed=args.distributed,
+            normalize=args.generative_normalize,
+            normalize_coef=args.generative_normalize_coef,
+            normalizer=args.generative_normalize_model,
         )
     elif task == "linear_probe":
         # we also need the train and validation splits for linear probing.
