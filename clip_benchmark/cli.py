@@ -51,9 +51,11 @@ def get_parser_args():
     parser_eval.add_argument('--generative-normalize-model', default='', type=str, help="Log-likelihood scoring with normalization, normalizer model")
 
     parser_eval.add_argument("--skip_load", action="store_true", help="for linear probes, when everything is cached, no need to load model.")
-    parser_eval.add_argument("--distributed", action="store_true", help="evaluation in parallel")
+    parser_eval.add_argument("--distributed", action="store_true", help="evaluation in parallel, multiple checkpoints at the same time")
+    parser_eval.add_argument("--distributed-data-parallel", action="store_true", help="evaluation in data parallel manner, a single checkpoint at same time")
     parser_eval.add_argument('--seed', default=0, type=int, help="random seed.")
     parser_eval.add_argument('--batch_size', default=64, type=int)
+    parser_eval.add_argument('--prompt_batch_size', default=64, type=int)
     parser_eval.add_argument('--normalize', default=True, type=bool, help="features normalization")
     parser_eval.add_argument('--model_cache_dir', default=None, type=str, help="directory to where downloaded models are cached")
     parser_eval.add_argument('--feature_root', default="features", type=str, help="feature root folder where the features are stored.")
@@ -184,6 +186,15 @@ def main_eval(base):
         random.seed(base.seed)
         random.shuffle(runs)
         runs = [r for i, r in enumerate(runs) if i % world_size == rank]
+
+    if base.distributed_data_parallel:
+        local_rank, global_rank, world_size = world_info_from_env()
+        os.environ['LOCAL_RANK'] = str(local_rank)
+        os.environ['RANK'] = str(global_rank)
+        os.environ['WORLD_SIZE'] = str(world_size)
+        torch.distributed.init_process_group(backend="nccl", init_method="env://", rank=global_rank, world_size=world_size)
+        torch.cuda.set_device(local_rank)
+    
     for (model, pretrained), (dataset), (language), task in runs:
         # We iterative over all possible model/dataset/languages
         args = copy(base)
@@ -217,7 +228,7 @@ def _single_option_to_multiple_datasets(cur_option, datasets, name):
 def run(args):
     """Console script for clip_benchmark."""
     if torch.cuda.is_available():
-        if args.distributed:
+        if args.distributed or args.distributed_data_parallel:
             local_rank, rank, world_size = world_info_from_env()
             device = 'cuda:%d' % local_rank
             torch.cuda.set_device(device)
@@ -226,6 +237,10 @@ def run(args):
         args.device = device
     else:
         args.device = "cpu"
+    if args.distributed_data_parallel:
+        rank_zero = rank == 0
+    else:
+        rank_zero = True
     # set seed.
     torch.manual_seed(args.seed)
     task = args.task
@@ -297,6 +312,8 @@ def run(args):
                     print("Dataset has no classes.")
 
         if args.dataset.startswith("wds/"):
+            if world_size > 1 and args.distributed_data_parallel:
+                raise ValueError("distributed data parallel not yet suppported for wds datasets")
             dataloader = torch.utils.data.DataLoader(
                 dataset.batched(args.batch_size), batch_size=None, 
                 shuffle=False, num_workers=args.num_workers,
@@ -305,7 +322,8 @@ def run(args):
             dataloader = torch.utils.data.DataLoader(
                 dataset, batch_size=args.batch_size, 
                 shuffle=False, num_workers=args.num_workers, 
-                collate_fn=collate_fn
+                collate_fn=collate_fn,
+                sampler=torch.utils.data.DistributedSampler(dataset, num_replicas=world_size, rank=rank) if args.distributed_data_parallel else None
             )
     if task == "zeroshot_classification":
         zeroshot_templates = dataset.templates if hasattr(dataset, "templates") else None
@@ -362,10 +380,11 @@ def run(args):
             classnames, 
             zeroshot_templates, 
             device,
-            distributed=args.distributed,
+            distributed=args.distributed_data_parallel,
             normalize=args.generative_normalize,
             normalize_coef=args.generative_normalize_coef,
             normalizer=args.generative_normalize_model,
+            prompt_batch_size=args.prompt_batch_size,
         )
     elif task == "linear_probe":
         # we also need the train and validation splits for linear probing.
@@ -435,22 +454,23 @@ def run(args):
         )
     else:
         raise ValueError("Unsupported task: {}. task should be `zeroshot_classification`, `zeroshot_retrieval`, `linear_probe`, or `captioning`".format(task))
-    dump = {
-        "dataset": args.dataset,
-        "model": args.model,
-        "pretrained": args.pretrained,
-        "task": task,
-        "metrics": metrics,
-        "language": args.language,
-    }
-    if hasattr(dataset, "classes") and dataset.classes and args.dump_classnames:
-        dump["classnames"] = dataset.classes
-    if hasattr(dataset, "templates") and dataset.templates and args.dump_templates:
-        dump["templates"] = dataset.templates
-    if args.verbose:
-        print(f"Dump results to: {output}")
-    with open(output, "w") as f:
-        json.dump(dump, f)
+    if rank_zero:
+        dump = {
+            "dataset": args.dataset,
+            "model": args.model,
+            "pretrained": args.pretrained,
+            "task": task,
+            "metrics": metrics,
+            "language": args.language,
+        }
+        if hasattr(dataset, "classes") and dataset.classes and args.dump_classnames:
+            dump["classnames"] = dataset.classes
+        if hasattr(dataset, "templates") and dataset.templates and args.dump_templates:
+            dump["templates"] = dataset.templates
+        if args.verbose:
+            print(f"Dump results to: {output}")
+        with open(output, "w") as f:
+            json.dump(dump, f)
     return 0
 
 

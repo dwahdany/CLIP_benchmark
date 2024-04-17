@@ -26,7 +26,7 @@ def score_aligned(logits, texts):
 def build_prompts(model, classnames, templates, device, amp=True):
     autocast = torch.cuda.amp.autocast if amp else suppress
     prompts = []
-    for classname in tqdm(classnames):
+    for classname in classnames:
         if type(templates) == dict:
             # class-specific prompts (e.g., CuPL https://arxiv.org/abs/2209.03320)
             texts = templates[classname]
@@ -70,7 +70,7 @@ def accuracy(output, target, topk=(1,)):
     return [float(correct[:k].reshape(-1).float().sum(0, keepdim=True).cpu().numpy()) / n for k in topk]
 
 
-def run_classification(model, prompts, dataloader, device, tokenizer=None, amp=True, normalize=False, normalizer=None, distributed=False, normalize_coef=1, class_per_batch=5, templates_per_batch=1, pad_id=0, verbose=False):
+def run_classification(model, prompts, dataloader, device, tokenizer=None, amp=True, normalize=False, normalizer=None, distributed=False, normalize_coef=1, prompt_batch_size=64, pad_id=0, verbose=False):
     """
     Run zero-shot classifcation
 
@@ -111,8 +111,8 @@ def run_classification(model, prompts, dataloader, device, tokenizer=None, amp=T
     max_text_len = (tokenized_prompts==pad_id).float().argmax(dim=2).max()
     tokenized_prompts = tokenized_prompts[:, :, 0:max_text_len]
     tokenized_prompts = tokenized_prompts.to(device)
+    tokenized_prompts_ = tokenized_prompts.view(nb_classes * nb_templates, -1)
     if normalize:
-        bs = class_per_batch * templates_per_batch
         if verbose:
             print("Calculating priors for normalization...")
         if normalizer:
@@ -120,30 +120,29 @@ def run_classification(model, prompts, dataloader, device, tokenizer=None, amp=T
             prompts_ = lm_tokenizer.batch_encode_plus(
                 prompts_, padding=True, return_tensors="pt", max_length=77, pad_to_max_length=True).input_ids
             prompts_ = prompts_.to(device)
-            bs = 10
             priors_all = []
-            for i in range(0, prompts_.shape[0], bs):
-                output = lm_model(prompts_[i:i+bs, 0:-1])
-                target = prompts_[i:i+bs, 1:]
+            for i in tqdm(range(0, prompts_.shape[0], prompt_batch_size)):
+                output = lm_model(prompts_[i:i+prompt_batch_size, 0:-1])
+                target = prompts_[i:i+prompt_batch_size, 1:]
                 priors = -F.cross_entropy(output.logits.transpose(1, 2), target, reduction="none", ignore_index=lm_tokenizer.pad_token_id).sum(dim=1).data.cpu()
                 priors_all.append(priors)
             priors = torch.cat(priors_all, 0)
             priors = priors.view(1, nb_classes, nb_templates).to(device)
         else:
             all_scores = []
-            tokenized_prompts_ = tokenized_prompts.view(nb_classes*nb_templates, -1)
-            for i in range(0, tokenized_prompts_.shape[0], bs):
+            for i in tqdm(range(0, tokenized_prompts_.shape[0], prompt_batch_size)):
                 input_text = tokenized_prompts_[i:i+bs, 0:-1]
                 nt = len(input_text)
-                out_text = tokenized_prompts_[i:i+bs, 1:]
+                # out_text = tokenized_prompts_[i:i+bs, 1:]
                 # logits, _ = model._encode_text(input_text, image_embs=None)
                 out = model.forward(
                     image=None,
                     image_embs=None,
-                    text=tokenized_prompts_[i:i+bs],
+                    text=tokenized_prompts_[i:i+prompt_batch_size],
                 )
                 logits = get_any(out, ["logits_text", "logits"])
-                scores = score_aligned(logits, out_text).cpu()
+                labels = get_any(out, ["labels_text", "labels"])
+                scores = score_aligned(logits, labels).cpu()
                 all_scores.append(scores)
             priors = torch.cat(all_scores)
             priors = priors.view(1, nb_classes, nb_templates).to(device)
@@ -156,33 +155,31 @@ def run_classification(model, prompts, dataloader, device, tokenizer=None, amp=T
         for images, target in tqdm(dataloader):
             images = images.to(device)
             target = target.to(device)
-            logits_batch = []
+            scores_batch = []
             _, image_embs = model._encode_image(images)
-            for i in range(0, nb_classes, class_per_batch):
-                texts = tokenized_prompts[i:i+class_per_batch, :, :]
-                nc = texts.shape[0]
-                texts = texts.view(nc*nb_templates, texts.shape[2])
-                nim, lim, dim = image_embs.shape
+            nim, lim, dim = image_embs.shape
+            for i in range(0, nb_classes*nb_templates, prompt_batch_size):
+                texts = tokenized_prompts_[i:i+prompt_batch_size, :]
                 ntext, ltext = texts.shape
                 image_embs_p = image_embs.view(nim, 1, lim, dim).repeat(1, ntext, 1, 1).view(nim*ntext, lim, dim)
                 texts_p = texts.view(1, ntext, ltext).repeat(nim, 1, 1).view(nim*ntext, ltext)
-                input_text = texts_p[:, 0:-1]
-                out_text = texts_p[:, 1:]
-                # logits, _ = model._encode_text(input_text, image_embs_p)
                 out = model.forward(
                     text=texts_p,
                     image_embs=image_embs_p,
                 )
                 logits = get_any(out, ["logits_text", "logits"])
-                scores = score_aligned(logits, out_text)
-                scores = scores.view(nim, nc, nb_templates)
-                if normalize:
-                    scores = scores - normalize_coef * priors[:, i:i+class_per_batch]
-                scores = scores.mean(2)
-                logits_batch.append(scores.float().cpu())
-            logits = torch.cat(logits_batch, 1)
+                labels = get_any(out, ["labels_text", "labels"])
+                scores = score_aligned(logits, labels)
+                scores = scores.view(nim, ntext)
+                scores_batch.append(scores.float())
+            scores = torch.cat(scores_batch, dim=1)
+            scores = scores.view(nim, nb_classes, nb_templates)
+            if normalize:
+                scores = scores - normalize_coef * priors
+            # score(class i) = sum score prompts for class i
+            scores = scores.sum(dim=-1)
             true.append(target.cpu())
-            pred.append(logits.float().cpu())
+            pred.append(scores.cpu())
     pred = torch.cat(pred)
     true = torch.cat(true)
     if distributed:
@@ -269,7 +266,7 @@ def average_precision_per_class(scores, targets):
     return ap
 
 
-def evaluate(model, dataloader, tokenizer, classnames, templates, device, amp=True, verbose=False, normalize=False, normalizer=None, normalize_coef=1, distributed=False):
+def evaluate(model, dataloader, tokenizer, classnames, templates, device, amp=True, verbose=False, normalize=False, normalizer=None, normalize_coef=1, distributed=False, prompt_batch_size=64):
     """
     Run zero-shot classification and evaluate the metrics
 
@@ -310,6 +307,7 @@ def evaluate(model, dataloader, tokenizer, classnames, templates, device, amp=Tr
         normalizer=normalizer,
         normalize_coef=normalize_coef,
         distributed=distributed,
+        prompt_batch_size=prompt_batch_size,
         verbose=verbose,
     )
     is_multilabel = (len(target.shape) == 2)

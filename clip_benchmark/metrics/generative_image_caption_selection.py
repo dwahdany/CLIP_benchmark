@@ -5,20 +5,6 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-def score_aligned(logits, texts):
-    # logits: (I, L, V)
-    # texts: (I, L)
-    I, L, V = logits.shape
-    I2, L = texts.shape
-    assert I == I2
-    lp = logits.log_softmax(dim=-1)
-    texts = texts.view(I, L, 1)
-    lp = torch.gather(lp, 2, texts)
-    lp[texts == 0] = 0
-    ce = lp.sum(dim=(1,2))
-    return ce
-
-
 def evaluate(model, dataloader, tokenizer,  device, amp=True):
     """
     Evaluate the model on the given dataset.
@@ -86,13 +72,14 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True):
             with torch.no_grad(), autocast():
                 image_embs_p = image_emb.view(nim, 1, lim, dim).repeat(1, ntext, 1, 1).view(nim*ntext, lim, dim)
                 texts_p = texts.view(1, ntext, ltext).repeat(nim, 1, 1).view(nim*ntext, ltext)
-                
-                input_text = texts_p[:, 0:-1]
-                out_text = texts_p[:, 1:]
-                _, input_text_embs_p = model._encode_text(input_text)
-                logits, _ = model._encode_text(input_text, image_embs_p)
-
-                scores = score_aligned(logits, out_text)
+                out = model.forward(
+                    image=None,
+                    image_embs=image_embs_p,
+                    text=texts_p,
+                )
+                logits = get_any(out, ["logits_text", "logits"])
+                labels = get_any(out, ["labels_text", "labels"])
+                scores = score_aligned(logits, labels)
                 scores = scores.view(nim, ntext)
                 if torch.any(torch.isnan(scores)):
                     pred_image_is_correct = False
@@ -128,3 +115,22 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True):
     metrics["text_acc"] = torch.Tensor(text_score).float().mean().item()
     metrics["acc"] = torch.Tensor(score).float().mean().item()
     return metrics
+
+def score_aligned(logits, texts):
+    # logits: (I, L, V)
+    # texts: (I, L)
+    I, L, V = logits.shape
+    I2, L = texts.shape
+    assert I == I2
+    lp = logits.log_softmax(dim=-1)
+    texts = texts.view(I, L, 1)
+    lp = torch.gather(lp, 2, texts)
+    lp[texts == 0] = 0
+    ce = lp.sum(dim=(1,2))
+    return ce
+
+def get_any(dic, keys, default=None):
+    for k in keys:
+        if k in dic:
+            return dic[k]
+    return default

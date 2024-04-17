@@ -45,7 +45,7 @@ def build_dataset(dataset_name, root="root", transform=None, split="test", downl
         where keys are classnames and values are class-specific prompts.
 
     """
-    use_classnames_and_templates = task in ('zeroshot_classification', 'linear_probe')
+    use_classnames_and_templates = task in ('generative_zeroshot_classification', 'zeroshot_classification', 'linear_probe')
     if use_classnames_and_templates:  # Only load templates and classnames if we have to
         current_folder = os.path.dirname(__file__)
 
