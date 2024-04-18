@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-def evaluate(model, dataloader, tokenizer,  device, amp=True):
+def evaluate(model, dataloader, tokenizer,  device, amp=True, normalize=False, normalizer=None, normalize_coef=1):
     """
     Evaluate the model on the given dataset.
     The task has N instances, each instance has I images and C captions.
@@ -34,6 +34,13 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True):
     
     dict of accuracy metrics
     """
+    if normalize and normalizer:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        model_id = normalizer
+        lm_model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", device_map=device, trust_remote_code=True)
+        lm_tokenizer =  AutoTokenizer.from_pretrained(model_id)
+        lm_tokenizer.pad_token = lm_tokenizer.eos_token
+        lm_model.float()
     autocast = torch.cuda.amp.autocast if amp else suppress
     image_score = []
     text_score = []
@@ -79,8 +86,31 @@ def evaluate(model, dataloader, tokenizer,  device, amp=True):
                 )
                 logits = get_any(out, ["logits_text", "logits"])
                 labels = get_any(out, ["labels_text", "labels"])
+ 
                 scores = score_aligned(logits, labels)
                 scores = scores.view(nim, ntext)
+
+                if normalize:
+                    if not normalizer:
+                        out_uncond = model.forward(
+                            image=None,
+                            image_embs=None,
+                            text=texts,
+                        )
+                        logits = get_any(out_uncond, ["logits_text", "logits"])
+                        labels = get_any(out_uncond, ["labels_text", "labels"])
+                        priors = score_aligned(logits, labels)
+                        priors = priors.view(1, len(texts))
+                    else:
+                        toks = lm_tokenizer.batch_encode_plus(
+                            batch_texts[i], padding=True, return_tensors="pt", max_length=77, pad_to_max_length=True).input_ids
+                        toks = toks.to(device)
+                        output = lm_model(toks[:, 0:-1])
+                        target = toks[:, 1:]
+                        priors = -F.cross_entropy(output.logits.transpose(1, 2), target, reduction="none", ignore_index=lm_tokenizer.pad_token_id).sum(dim=1).data
+                        priors = priors.view(1, len(texts))
+                    scores = scores - normalize_coef * priors
+
                 if torch.any(torch.isnan(scores)):
                     pred_image_is_correct = False
                     pred_text_is_correct = False

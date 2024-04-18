@@ -366,6 +366,9 @@ def run(args):
             tokenizer,
             device=args.device,
             amp=args.amp, 
+            normalize=args.generative_normalize,
+            normalize_coef=args.generative_normalize_coef,
+            normalizer=args.generative_normalize_model,
         )
     elif task == "generative_zeroshot_classification":
         zeroshot_templates = dataset.templates if hasattr(dataset, "templates") else None
