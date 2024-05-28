@@ -122,27 +122,27 @@ def run_classification(model, prompts, dataloader, device, tokenizer=None, amp=T
             prompts_ = prompts_.to(device)
             priors_all = []
             for i in tqdm(range(0, prompts_.shape[0], prompt_batch_size)):
-                output = lm_model(prompts_[i:i+prompt_batch_size, 0:-1])
-                target = prompts_[i:i+prompt_batch_size, 1:]
-                priors = -F.cross_entropy(output.logits.transpose(1, 2), target, reduction="none", ignore_index=lm_tokenizer.pad_token_id).sum(dim=1).data.cpu()
+                with torch.no_grad(), autocast():
+                    output = lm_model(prompts_[i:i+prompt_batch_size, 0:-1])
+                    target = prompts_[i:i+prompt_batch_size, 1:]
+                    priors = -F.cross_entropy(output.logits.transpose(1, 2), target, reduction="none", ignore_index=lm_tokenizer.pad_token_id).sum(dim=1).data.cpu()
                 priors_all.append(priors)
             priors = torch.cat(priors_all, 0)
             priors = priors.view(1, nb_classes, nb_templates).to(device)
         else:
             all_scores = []
             for i in tqdm(range(0, tokenized_prompts_.shape[0], prompt_batch_size)):
-                input_text = tokenized_prompts_[i:i+bs, 0:-1]
+                input_text = tokenized_prompts_[i:i+prompt_batch_size, 0:-1]
                 nt = len(input_text)
-                # out_text = tokenized_prompts_[i:i+bs, 1:]
-                # logits, _ = model._encode_text(input_text, image_embs=None)
-                out = model.forward(
-                    image=None,
-                    image_embs=None,
-                    text=tokenized_prompts_[i:i+prompt_batch_size],
-                )
-                logits = get_any(out, ["logits_text", "logits"])
-                labels = get_any(out, ["labels_text", "labels"])
-                scores = score_aligned(logits, labels).cpu()
+                with torch.no_grad(), autocast():
+                    out = model.forward(
+                        image=None,
+                        image_embs=None,
+                        text=tokenized_prompts_[i:i+prompt_batch_size],
+                    )
+                    logits = get_any(out, ["logits_text", "logits"])
+                    labels = get_any(out, ["labels_text", "labels"])
+                    scores = score_aligned(logits, labels).cpu()
                 all_scores.append(scores)
             priors = torch.cat(all_scores)
             priors = priors.view(1, nb_classes, nb_templates).to(device)
