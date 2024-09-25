@@ -1697,5 +1697,19 @@
         "moderate diabetic retinopathy",
         "severe diabetic retinopathy",
         "proliferative diabetic retinopathy"
+    ],
+    "fairvision/amd": [
+        "no age-related macular degeneration",
+        "early age-related macular degeneration",
+        "intermediate age-related macular degeneration",
+        "late age-related macular degeneration"
+    ],
+    "fairvision/dr": [
+        "no vision threatening diabetic retinopathy",
+        "vision threatening diabetic retinopathy"
+    ],
+    "fairvision/glaucoma": [
+        "without glaucoma",
+        "with glaucoma"
     ]
 }
