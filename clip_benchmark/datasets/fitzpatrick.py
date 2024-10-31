@@ -19,6 +19,7 @@ class FitzpatrickDataset(VisionDataset):
         self, root_dir, stage="training", transform=None, seed: int = 4242
     ):
         self.seed = seed
+        self.root = root_dir
         df = pd.read_csv(os.path.join(root_dir, "fitzpatrick17k.csv"))
         df["low"] = df["label"].astype("category").cat.codes
         df["mid"] = df["nine_partition_label"].astype("category").cat.codes
