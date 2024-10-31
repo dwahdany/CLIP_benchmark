@@ -32,6 +32,7 @@ from . import (
     babel_imagenet,
     caltech101,
     fairvision,
+    fitzpatrick,
     flickr,
     imagenetv2,
     objectnet,
@@ -1493,6 +1494,10 @@ def build_dataset(
             root_dir=root,
             transform=transform,
             stage=split,
+        )
+    elif dataset_name == "fitzpatrick17k":
+        ds = fitzpatrick.FitzpatrickDataset(
+            root_dir=root, stage=split, transform=transform
         )
     elif dataset_name == "dummy":
         ds = Dummy()
