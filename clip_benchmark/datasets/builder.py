@@ -1495,7 +1495,7 @@ def build_dataset(
             transform=transform,
             stage=split,
         )
-    elif dataset_name == "fitzpatrick17k":
+    elif dataset_name.lower() == "fitzpatrick17k":
         ds = fitzpatrick.FitzpatrickDataset(
             root_dir=root, stage=split, transform=transform
         )

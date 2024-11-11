@@ -17,7 +17,7 @@ class FairvisionDataset(VisionDataset):
     def __init__(self, csv_file, root_dir, stage="training", transform=None):
         self.df = pd.read_csv(csv_file)
         self.df = self.df[self.df["use"] == stage]
-        self.root_dir = root_dir
+        self.root = root_dir
         self.transform = transform
 
     @staticmethod
@@ -54,7 +54,7 @@ class FairvisionDataset(VisionDataset):
             idx = idx.tolist()
         filename = self.df.loc[self.df.index[idx], "filename"]
         img_name = os.path.join(
-            self.root_dir,
+            self.root,
             self.df.loc[self.df.index[idx], "use"].capitalize(),
             filename,
         )
