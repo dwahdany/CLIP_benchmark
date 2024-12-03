@@ -58,7 +58,11 @@ class FairvisionDataset(VisionDataset):
             self.df.loc[self.df.index[idx], "use"].capitalize(),
             filename,
         )
-        image = np.load(img_name)["slo_fundus"]
+        # image = np.load(img_name)["slo_fundus"]
+        image = Image.open(
+            img_name.replace("data_", "slo_fundus_").replace(".npz", ".jpg")
+        )
+        image = np.array(image)
         if len(image.shape) < 3:
             image = skimage.color.gray2rgb(image)
         image = Image.fromarray((image).astype(np.uint8))
