@@ -1688,8 +1688,8 @@
         "Yorkshire Terrier"
     ],
     "pcam": [
-        "lymph node",
-        "lymph node containing metastatic tumor tissue"
+        "a histopathology slide showing lymph node",
+        "histopathology image of lymph node containing metastatic tumor tissue"
     ],
     "diabetic_retinopathy": [
         "no diabetic retinopathy",
@@ -1711,5 +1711,14 @@
     "fairvision/glaucoma": [
         "without glaucoma",
         "with glaucoma"
+    ],
+    "fitzpatrick17k": [
+        "benign lesion",
+        "malignant lesion",
+        "non-neoplastic condition"
+    ],
+    "vtab/pcam": [
+        "a histopathology slide showing lymph node",
+        "histopathology image of lymph node containing metastatic tumor tissue"
     ]
 }

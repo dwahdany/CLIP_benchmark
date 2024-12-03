@@ -298,6 +298,12 @@
     "fairvision/glaucoma": [
         "a retinal image with {c}."
     ],
+    "fitzpatrick17k": [
+        "a skin image showing a {c}."
+    ],
+    "vtab/pcam": [
+        "{c}."
+    ],
     "dummy": [
         "a photo of a {c}"
     ]
