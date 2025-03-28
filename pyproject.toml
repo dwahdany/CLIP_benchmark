@@ -1,0 +1,17 @@
+[project]
+name = "clip-benchmark"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "open-clip-torch>=0.2.1",
+    "pycocoevalcap>=1.2",
+    "scikit-learn>=1.0,<2",
+    "torch>=1.8.1",
+    "torch-rs>=0.0.4",
+    "torchvision>=0.8.9",
+    "tqdm>=2",
+    "transformers>=4.50.3",
+    "webdataset>=0.2.31",
+]

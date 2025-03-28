@@ -6,6 +6,7 @@ from subprocess import call
 
 import torch
 from torch.utils.data import default_collate
+from torchrs.datasets import RESISC45
 from torchvision.datasets import (
     CIFAR10,
     CIFAR100,
@@ -88,9 +89,7 @@ def build_dataset(
         "zeroshot_classification",
         "linear_probe",
     )
-    if (
-        use_classnames_and_templates
-    ):  # Only load templates and classnames if we have to
+    if use_classnames_and_templates:  # Only load templates and classnames if we have to
         current_folder = os.path.dirname(__file__)
 
         # Load <LANG>_classnames.json (packaged with CLIP benchmark that are used by default)
@@ -256,24 +255,18 @@ def build_dataset(
             "test",
         ), f"Only `train` and `test` split available for {dataset_name}"
         split = "train" if train else "val"
-        ds = ImageFolder(
-            root=os.path.join(root, split), transform=transform, **kwargs
-        )
+        ds = ImageFolder(root=os.path.join(root, split), transform=transform, **kwargs)
         # use classnames from OpenAI
         ds.classes = default_classnames["imagenet1k"]
     elif dataset_name == "imagenetv2":
-        assert (
-            split == "test"
-        ), f"Only `test` split available for {dataset_name}"
+        assert split == "test", f"Only `test` split available for {dataset_name}"
         os.makedirs(root, exist_ok=True)
         ds = imagenetv2.ImageNetV2Dataset(
             variant="matched-frequency", transform=transform, location=root
         )
         ds.classes = default_classnames["imagenet1k"]
     elif dataset_name == "imagenet_sketch":
-        assert (
-            split == "test"
-        ), f"Only `test` split available for {dataset_name}"
+        assert split == "test", f"Only `test` split available for {dataset_name}"
         # Downloadable from https://drive.google.com/open?id=1Mj0i5HBthqH1p_yeXzsg22gZduvgoNeA
         if not os.path.exists(root):
             # Automatic download
@@ -292,9 +285,7 @@ def build_dataset(
         ds = ImageFolder(root=root, transform=transform, **kwargs)
         ds.classes = default_classnames["imagenet1k"]
     elif dataset_name == "imagenet-a":
-        assert (
-            split == "test"
-        ), f"Only `test` split available for {dataset_name}"
+        assert split == "test", f"Only `test` split available for {dataset_name}"
         # Downloadable from https://people.eecs.berkeley.edu/~hendrycks/imagenet-a.tar
         if not os.path.exists(root):
             print("Downloading imagenet-a...")
@@ -512,13 +503,9 @@ def build_dataset(
         imagenet_a_mask = [
             wnid in set(imagenet_a_wnids) for wnid in all_imagenet_wordnet_ids
         ]
-        ds.classes = [
-            cl for cl, mask in zip(ds.classes, imagenet_a_mask) if mask
-        ]
+        ds.classes = [cl for cl, mask in zip(ds.classes, imagenet_a_mask) if mask]
     elif dataset_name == "imagenet-r":
-        assert (
-            split == "test"
-        ), f"Only `test` split available for {dataset_name}"
+        assert split == "test", f"Only `test` split available for {dataset_name}"
         # downloadable from https://people.eecs.berkeley.edu/~hendrycks/imagenet-r.tar
         if not os.path.exists(root):
             print("Downloading imagenet-r...")
@@ -736,13 +723,9 @@ def build_dataset(
         ]
         ds = ImageFolder(root=root, transform=transform, **kwargs)
         ds.classes = default_classnames["imagenet1k"]
-        ds.classes = [
-            cl for cl, mask in zip(ds.classes, imagenet_r_mask) if mask
-        ]
+        ds.classes = [cl for cl, mask in zip(ds.classes, imagenet_r_mask) if mask]
     elif dataset_name == "imagenet-o":
-        assert (
-            split == "test"
-        ), f"Only `test` split available for {dataset_name}"
+        assert split == "test", f"Only `test` split available for {dataset_name}"
         # downloadable from https://people.eecs.berkeley.edu/~hendrycks/imagenet-o.tar
         if not os.path.exists(root):
             print("Downloading imagenet-o...")
@@ -960,13 +943,9 @@ def build_dataset(
         imagenet_o_mask = [
             wnid in set(imagenet_o_wnids) for wnid in all_imagenet_wordnet_ids
         ]
-        ds.classes = [
-            cl for cl, mask in zip(ds.classes, imagenet_o_mask) if mask
-        ]
+        ds.classes = [cl for cl, mask in zip(ds.classes, imagenet_o_mask) if mask]
     elif dataset_name == "objectnet":
-        assert (
-            split == "test"
-        ), f"Only `test` split available for {dataset_name}"
+        assert split == "test", f"Only `test` split available for {dataset_name}"
         # downloadable from https://objectnet.dev/downloads/objectnet-1.0.zip or https://www.dropbox.com/s/raw/cxeztdtm16nzvuw/objectnet-1.0.zip
         if not os.path.exists(root):
             print("Downloading objectnet...")
@@ -1019,9 +998,7 @@ def build_dataset(
             "swap_att",
             "swap_obj",
         ), f"Unknown task {task} for {dataset_name}"
-        assert (
-            split == "test"
-        ), f"Only `test` split available for {dataset_name}"
+        assert split == "test", f"Only `test` split available for {dataset_name}"
         archive_name = "val2017.zip"
         root_split = os.path.join(root, archive_name.replace(".zip", ""))
         if not os.path.exists(root_split):
@@ -1080,9 +1057,7 @@ def build_dataset(
         from clip_benchmark.datasets import multilingual_mscoco
 
         if language not in multilingual_mscoco.SUPPORTED_LANGUAGES:
-            raise ValueError(
-                "Unsupported language for multilingual_ms_coco:", language
-            )
+            raise ValueError("Unsupported language for multilingual_ms_coco:", language)
 
         annotation_file = os.path.join(
             root, multilingual_mscoco.OUTPUT_FILENAME_TEMPLATE.format(language)
@@ -1097,9 +1072,7 @@ def build_dataset(
         from clip_benchmark.datasets import crossmodal3600
 
         if language not in crossmodal3600.SUPPORTED_LANGUAGES:
-            raise ValueError(
-                "Unsupported language for Crossmodal-3600:", language
-            )
+            raise ValueError("Unsupported language for Crossmodal-3600:", language)
 
         annotation_file = os.path.join(
             root, crossmodal3600.OUTPUT_FILENAME_TEMPLATE.format(language)
@@ -1129,9 +1102,7 @@ def build_dataset(
         from clip_benchmark.datasets import flickr30k_200
 
         if language not in flickr30k_200.SUPPORTED_LANGUAGES:
-            raise ValueError(
-                "Unsupported language for flickr30k-200:", language
-            )
+            raise ValueError("Unsupported language for flickr30k-200:", language)
 
         annotation_file = os.path.join(
             root, flickr30k_200.OUTPUT_FILENAME_TEMPLATE.format(language)
@@ -1146,8 +1117,10 @@ def build_dataset(
         # downloadable from https://www.kaggle.com/datasets/adityajn105/flickr30k
         # https://github.com/mehdidc/retrieval_annotations/releases/tag/1.0.0(annotations)
         # `kaggle datasets download -d adityajn105/flickr30k`
-        assert (
-            split in ("train", "val", "test")
+        assert split in (
+            "train",
+            "val",
+            "test",
         ), f"Only `train` and `val` and `test` split available for {dataset_name}"
         if not os.path.exists(root):
             # Automatic download
@@ -1195,8 +1168,10 @@ def build_dataset(
             root=root, ann_file=annotation_file, transform=transform, **kwargs
         )
     elif dataset_name == "flickr8k":
-        assert (
-            split in ("train", "val", "test")
+        assert split in (
+            "train",
+            "val",
+            "test",
         ), f"Only `train` and `val` and `test` split available for {dataset_name}"
         # downloadable from https://www.kaggle.com/datasets/adityajn105/flickr8k
         # `kaggle datasets download -d adityajn105/flickr8k`
@@ -1209,9 +1184,7 @@ def build_dataset(
                     "Kaggle is needed to download the dataset. Please install it via `pip install kaggle`"
                 )
                 sys.exit(1)
-            call(
-                "kaggle datasets download -d adityajn105/flickr8k", shell=True
-            )
+            call("kaggle datasets download -d adityajn105/flickr8k", shell=True)
             call("unzip flickr8k.zip", shell=True)
             call(f"mv Images {root}", shell=True)
             call(f"mv captions.txt {root}", shell=True)
@@ -1264,12 +1237,8 @@ def build_dataset(
         )
         # we use the default class names, we just  replace "_" and "/" by spaces
         # to delimit words
-        ds = SUN397(
-            root=root, transform=transform, download=download, **kwargs
-        )
-        ds.classes = [
-            cl.replace("_", " ").replace("/", " ") for cl in ds.classes
-        ]
+        ds = SUN397(root=root, transform=transform, download=download, **kwargs)
+        ds.classes = [cl.replace("_", " ").replace("/", " ") for cl in ds.classes]
     elif dataset_name == "cars":
         assert split in (
             "train",
@@ -1295,8 +1264,10 @@ def build_dataset(
             **kwargs,
         )
     elif dataset_name == "dtd":
-        assert (
-            split in ("train", "val", "test")
+        assert split in (
+            "train",
+            "val",
+            "test",
         ), f"Only `train` and `val` and `test` split available for {dataset_name}"
         ds = DTD(
             root=root,
@@ -1334,8 +1305,10 @@ def build_dataset(
         )
         ds.classes = default_classnames["caltech101"]
     elif dataset_name == "flowers":
-        assert (
-            split in ("train", "val", "test")
+        assert split in (
+            "train",
+            "val",
+            "test",
         ), f"Only `train` and `val` and `test` split available for {dataset_name}"
         ds = Flowers102(
             root=root,
@@ -1379,9 +1352,7 @@ def build_dataset(
         warnings.warn(
             f"split argument ignored for `{dataset_name}`, there are no pre-defined train/test splits for this dataset"
         )
-        ds = EuroSAT(
-            root=root, transform=transform, download=download, **kwargs
-        )
+        ds = EuroSAT(root=root, transform=transform, download=download, **kwargs)
         ds.classes = default_classnames["eurosat"]
     elif dataset_name == "gtsrb":
         assert split in (
@@ -1397,8 +1368,10 @@ def build_dataset(
         )
         ds.classes = default_classnames["gtsrb"]
     elif dataset_name == "country211":
-        assert (
-            split in ("train", "valid", "test")
+        assert split in (
+            "train",
+            "valid",
+            "test",
         ), f"Only `train` and `valid` and `test` split available for {dataset_name}"
         ds = Country211(
             root=root,
@@ -1409,8 +1382,10 @@ def build_dataset(
         )
         ds.classes = default_classnames["country211"]
     elif dataset_name == "pcam":
-        assert (
-            split in ("train", "val", "test")
+        assert split in (
+            "train",
+            "val",
+            "test",
         ), f"Only `train` and `val` and `test` split available for {dataset_name}"
         # Dead link. Fixed by this PR on torchvision https://github.com/pytorch/vision/pull/5645
         # TODO figure out minimal torchvision version needed
@@ -1423,8 +1398,10 @@ def build_dataset(
         )
         ds.classes = default_classnames["pcam"]
     elif dataset_name == "renderedsst2":
-        assert (
-            split in ("train", "val", "test")
+        assert split in (
+            "train",
+            "val",
+            "test",
         ), f"Only `train` and `val` and `test` split available for {dataset_name}"
         ds = RenderedSST2(
             root=root,
@@ -1499,6 +1476,8 @@ def build_dataset(
         ds = fitzpatrick.FitzpatrickDataset(
             root_dir=root, stage=split, transform=transform
         )
+    elif dataset_name.lower() == "resisc45":
+        ds = RESISC45(root_dir=root, stage=split, transform=transform)
     elif dataset_name == "dummy":
         ds = Dummy()
     else:
@@ -1552,12 +1531,8 @@ def build_dataset(
                 custom_classnames, keys=keys_to_lookup
             )
 
-        assert (
-            ds.classes is not None
-        ), f"Classes not specified for {dataset_name}"
-        assert (
-            ds.templates is not None
-        ), f"Templates not specified for {dataset_name}"
+        assert ds.classes is not None, f"Classes not specified for {dataset_name}"
+        assert ds.templates is not None, f"Templates not specified for {dataset_name}"
     return ds
 
 
@@ -1695,9 +1670,7 @@ def build_vtab_dataset(
             )
         from task_adaptation.data.diabetic_retinopathy import RetinopathyData
 
-        tfds_dataset = RetinopathyData(
-            config="btgraham-300", data_dir=data_dir
-        )
+        tfds_dataset = RetinopathyData(config="btgraham-300", data_dir=data_dir)
         classes = classnames["diabetic_retinopathy"]
     elif dataset_name == "dmlab":
         from task_adaptation.data.dmlab import DmlabData
@@ -1727,9 +1700,7 @@ def build_vtab_dataset(
     elif dataset_name == "eurosat":
         from task_adaptation.data.eurosat import EurosatData
 
-        tfds_dataset = EurosatData(
-            subset="rgb", data_key="image", data_dir=data_dir
-        )
+        tfds_dataset = EurosatData(subset="rgb", data_key="image", data_dir=data_dir)
         classes = classnames["eurosat"]
     elif dataset_name == "food101":
         from task_adaptation.data.food101 import Food101Data
@@ -1798,9 +1769,7 @@ def build_vtab_dataset(
             "label_azimuth",
             "label_lighting",
         )
-        tfds_dataset = SmallNORBData(
-            predicted_attribute=task, data_dir=data_dir
-        )
+        tfds_dataset = SmallNORBData(predicted_attribute=task, data_dir=data_dir)
         classes = tfds_dataset._dataset_builder.info.features[task].names
     elif dataset_name == "sun397":
         from task_adaptation.data.sun397 import Sun397Data
@@ -1849,9 +1818,7 @@ def build_tfds_dataset(
         transform=transform,
         target_transform=int,
     )
-    ds.classes = (
-        builder.info.features["label"].names if classes is None else classes
-    )
+    ds.classes = builder.info.features["label"].names if classes is None else classes
     return ds
 
 
@@ -1921,24 +1888,20 @@ def build_wds_dataset(
         # print("WARNING: dataset_type.txt not found, assuming type=classification")
         dataset_type = "classification"
     #
-    filepattern = os.path.join(
-        tardata_dir, split, "{0..%d}.tar" % (nshards - 1)
-    )
+    filepattern = os.path.join(tardata_dir, split, "{0..%d}.tar" % (nshards - 1))
     # Load webdataset (support WEBP, PNG, and JPG for now)
     if not cache_dir or not isinstance(cache_dir, str):
         cache_dir = None
     dataset = wds.WebDataset(
         filepattern, cache_dir=cache_dir, nodesplitter=lambda src: src
     ).decode(
-        wds.autodecode.ImageHandler(
-            "pil", extensions=["webp", "png", "jpg", "jpeg"]
-        )
+        wds.autodecode.ImageHandler("pil", extensions=["webp", "png", "jpg", "jpeg"])
     )
     # Load based on classification or retrieval task
     if dataset_type == "retrieval":
-        dataset = dataset.to_tuple(
-            ["webp", "png", "jpg", "jpeg"], "txt"
-        ).map_tuple(transform, str.splitlines)
+        dataset = dataset.to_tuple(["webp", "png", "jpg", "jpeg"], "txt").map_tuple(
+            transform, str.splitlines
+        )
         dataset.classes = dataset.templates = None
     else:
         label_type = (
@@ -1951,8 +1914,7 @@ def build_wds_dataset(
         classnames_fname = os.path.join(metadata_dir, "classnames.txt")
         try:
             dataset.classes = [
-                line.strip()
-                for line in read_txt(classnames_fname).splitlines()
+                line.strip() for line in read_txt(classnames_fname).splitlines()
             ]
         except FileNotFoundError:
             print("WARNING: classnames.txt not found")
