@@ -4,8 +4,11 @@ import sys
 import warnings
 from subprocess import call
 
+import numpy as np
+import sklearn
 import torch
 from torch.utils.data import default_collate
+from torch_things.dataset import DelegatingSubset
 from torchrs.datasets import RESISC45
 from torchvision.datasets import (
     CIFAR10,
@@ -1477,7 +1480,30 @@ def build_dataset(
             root_dir=root, stage=split, transform=transform
         )
     elif dataset_name.lower() == "resisc45":
-        ds = RESISC45(root_dir=root, stage=split, transform=transform)
+        ds = RESISC45(root=root, transform=transform)
+        train_inds, test_val_inds = sklearn.model_selection.train_test_split(
+            list(range(len(ds))),
+            test_size=0.2,
+            random_state=42,
+            stratify=ds.targets,
+        )
+        test_inds, val_inds = sklearn.model_selection.train_test_split(
+            test_val_inds,
+            test_size=0.5,
+            random_state=42,
+            stratify=np.array(ds.targets)[test_val_inds],
+        )
+
+        if split == "train":
+            ds = DelegatingSubset(ds, train_inds)
+        elif split == "val":
+            ds = DelegatingSubset(ds, val_inds)
+        elif split == "test":
+            ds = DelegatingSubset(ds, test_inds)
+        else:
+            raise ValueError(
+                f"Invalid split {split}, must be one of ['train', 'val', 'test']"
+            )
     elif dataset_name == "dummy":
         ds = Dummy()
     else:
