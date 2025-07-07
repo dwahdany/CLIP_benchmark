@@ -10,6 +10,7 @@ dependencies = [
     "pandas",
     "pycocoevalcap",
     "scikit-learn<2",
+    "scikit-image",
     "torch",
     "torch-rs",
     "torch-things",
